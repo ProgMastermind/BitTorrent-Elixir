@@ -168,29 +168,19 @@ defmodule BitTorrentTracker do
   end
 
   defp parse_successful_response(response) do
-    # case response do
-    #   %{"peers" => peers_binary} when is_binary(peers_binary) ->
-    #     parsed_peers = parse_compact_peers(peers_binary)
-    #     {:ok, parsed_peers}
+    Logger.debug(response)
 
-    #   %{"peers" => peers_list} when is_list(peers_list) ->
-    #     parsed_peers = parse_dictionary_model_peers(peers_list)
-    #     {:ok, parsed_peers}
-
-    #   _ ->
-    #     {:error, "Invalid or missing peers data in tracker response"}
-    # end
-    case Keyword.fetch(response, "peers") do
-      {:ok, peers_binary} when is_binary(peers_binary) ->
+    case response do
+      %{"peers" => peers_binary} when is_binary(peers_binary) ->
         parsed_peers = parse_compact_peers(peers_binary)
         {:ok, parsed_peers}
 
-      {:ok, peers_list} when is_list(peers_list) ->
+      %{"peers" => peers_list} when is_list(peers_list) ->
         parsed_peers = parse_dictionary_model_peers(peers_list)
         {:ok, parsed_peers}
 
-      :error ->
-        {:error, "Missing peers data in tracker response"}
+      _ ->
+        {:error, "Invalid or missing peers data in tracker response"}
     end
   end
 
