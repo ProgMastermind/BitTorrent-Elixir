@@ -20,6 +20,10 @@ defmodule Bittorrent.CLI do
 end
 
 defmodule Bencode do
+  def decode(<<"d", rest::binary>>) do
+    decode_dict(rest, %{})
+  end
+
   def decode(<<"l", rest::binary>>) do
     decode_list(rest, [])
   end
@@ -33,6 +37,19 @@ defmodule Bencode do
   end
 
   def decode(_), do: {:error, "Invalid bencoded value"}
+
+  defp decode_dict(<<"e", rest::binary>>, acc) do
+    {:ok, acc, rest}
+  end
+
+  defp decode_dict(data, acc) do
+    with {:ok, key, rest} <- decode_string(data),
+         {:ok, value, rest} <- decode(rest) do
+      decode_dict(rest, Map.put(acc, key, value))
+    else
+      {:error, _} = error -> error
+    end
+  end
 
   defp decode_list(<<"e", rest::binary>>, acc) do
     {:ok, Enum.reverse(acc), rest}
