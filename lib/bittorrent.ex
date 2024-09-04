@@ -12,10 +12,20 @@ defmodule Bittorrent.CLI do
 
   defp execute_command("info", [torrent_file]) do
     case TorrentParser.parse_file(torrent_file) do
-      {:ok, %{tracker_url: tracker_url, length: length, info_hash: info_hash}} ->
+      {:ok,
+       %{
+         tracker_url: tracker_url,
+         length: length,
+         info_hash: info_hash,
+         piece_length: piece_length,
+         piece_hashes: piece_hashes
+       }} ->
         IO.puts("Tracker URL: #{tracker_url}")
         IO.puts("Length: #{length}")
         IO.puts("Info Hash: #{info_hash}")
+        IO.puts("Piece Length: #{piece_length}")
+        IO.puts("Piece Hashes:")
+        Enum.each(piece_hashes, &IO.puts/1)
 
       {:error, message} ->
         IO.puts("Error: #{message}")
@@ -42,8 +52,18 @@ defmodule TorrentParser do
          {:ok, tracker_url} <- Map.fetch(decoded, "announce"),
          {:ok, info} <- Map.fetch(decoded, "info"),
          {:ok, length} <- Map.fetch(info, "length"),
-         info_hash <- calculate_info_hash(info) do
-      {:ok, %{tracker_url: tracker_url, length: length, info_hash: info_hash}}
+         {:ok, piece_length} <- Map.fetch(info, "piece length"),
+         {:ok, pieces} <- Map.fetch(info, "pieces"),
+         info_hash <- calculate_info_hash(info),
+         piece_hashes <- split_piece_hashes(pieces) do
+      {:ok,
+       %{
+         tracker_url: tracker_url,
+         length: length,
+         info_hash: info_hash,
+         piece_length: piece_length,
+         piece_hashes: piece_hashes
+       }}
     else
       {:error, reason} -> {:error, "Failed to parse torrent file: #{inspect(reason)}"}
       :error -> {:error, "Missing required fields in torrent file"}
@@ -64,6 +84,10 @@ defmodule TorrentParser do
 
   defp sha1_hash(data) do
     :crypto.hash(:sha, data)
+  end
+
+  defp split_piece_hashes(pieces) do
+    for <<hash::binary-size(20) <- pieces>>, do: Base.encode16(hash, case: :lower)
   end
 end
 
