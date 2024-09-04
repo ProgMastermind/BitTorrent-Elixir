@@ -12,9 +12,10 @@ defmodule Bittorrent.CLI do
 
   defp execute_command("info", [torrent_file]) do
     case TorrentParser.parse_file(torrent_file) do
-      {:ok, %{tracker_url: tracker_url, length: length}} ->
+      {:ok, %{tracker_url: tracker_url, length: length, info_hash: info_hash}} ->
         IO.puts("Tracker URL: #{tracker_url}")
         IO.puts("Length: #{length}")
+        IO.puts("Info Hash: #{info_hash}")
 
       {:error, message} ->
         IO.puts("Error: #{message}")
@@ -40,12 +41,29 @@ defmodule TorrentParser do
          {:ok, decoded, _rest} <- Bencode.decode(binary),
          {:ok, tracker_url} <- Map.fetch(decoded, "announce"),
          {:ok, info} <- Map.fetch(decoded, "info"),
-         {:ok, length} <- Map.fetch(info, "length") do
-      {:ok, %{tracker_url: tracker_url, length: length}}
+         {:ok, length} <- Map.fetch(info, "length"),
+         info_hash <- calculate_info_hash(info) do
+      {:ok, %{tracker_url: tracker_url, length: length, info_hash: info_hash}}
     else
       {:error, reason} -> {:error, "Failed to parse torrent file: #{inspect(reason)}"}
       :error -> {:error, "Missing required fields in torrent file"}
     end
+  end
+
+  defp calculate_info_hash(info) do
+    case Bento.encode(info) do
+      {:ok, bencoded_info} ->
+        bencoded_info
+        |> sha1_hash()
+        |> Base.encode16(case: :lower)
+
+      {:error, reason} ->
+        raise "Failed to encode info dictionary: #{inspect(reason)}"
+    end
+  end
+
+  defp sha1_hash(data) do
+    :crypto.hash(:sha, data)
   end
 end
 
