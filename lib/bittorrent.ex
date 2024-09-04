@@ -10,6 +10,12 @@ defmodule Bittorrent.CLI do
     end
   end
 
+  defp execute_command("handshake", [torrent_file, peer_address]) do
+    [ip, port] = String.split(peer_address, ":")
+    port = String.to_integer(port)
+    YourBittorrentClient.perform_handshake(torrent_file, ip, port)
+  end
+
   defp execute_command("peers", [torrent_file]) do
     case YourBittorrentClient.start_download(torrent_file) do
       {:ok, peers} ->
@@ -74,6 +80,49 @@ defmodule YourBittorrentClient do
   defp generate_peer_id do
     # Generate a unique 20-byte peer ID
     "00112233445566778899"
+  end
+
+  def perform_handshake(torrent_file, ip, port) do
+    case TorrentParser.parse_file(torrent_file) do
+      {:ok, %{info_hash: info_hash}} ->
+        peer_id = generate_peer_id()
+        raw_info_hash = Base.decode16!(info_hash, case: :lower)
+        handshake_msg = create_handshake_message(raw_info_hash, peer_id)
+
+        case :gen_tcp.connect(String.to_charlist(ip), port, [:binary, active: false]) do
+          {:ok, socket} ->
+            :ok = :gen_tcp.send(socket, handshake_msg)
+
+            case :gen_tcp.recv(socket, 68) do
+              {:ok, response} ->
+                peer_id = binary_part(response, 48, 20)
+                IO.puts("Peer ID: #{Base.encode16(peer_id, case: :lower)}")
+
+              {:error, reason} ->
+                IO.puts("Error receiving handshake: #{inspect(reason)}")
+            end
+
+            :gen_tcp.close(socket)
+
+          {:error, reason} ->
+            IO.puts("Error connecting to peer: #{inspect(reason)}")
+        end
+
+      {:error, reason} ->
+        IO.puts("Error parsing torrent file: #{inspect(reason)}")
+    end
+  end
+
+  defp create_handshake_message(info_hash, peer_id) do
+    protocol = "BitTorrent protocol"
+
+    <<
+      byte_size(protocol),
+      protocol::binary,
+      0::size(64),
+      info_hash::binary,
+      peer_id::binary
+    >>
   end
 end
 
@@ -168,8 +217,6 @@ defmodule BitTorrentTracker do
   end
 
   defp parse_successful_response(response) do
-    Logger.debug(response)
-
     case response do
       %{"peers" => peers_binary} when is_binary(peers_binary) ->
         parsed_peers = parse_compact_peers(peers_binary)
