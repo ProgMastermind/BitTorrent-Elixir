@@ -1,20 +1,50 @@
 defmodule Bittorrent.CLI do
   def main(argv) do
     case argv do
-      ["decode" | [encoded_str | _]] ->
-        case Bencode.decode(encoded_str) do
-          {:ok, decoded_value, _rest} -> IO.puts(Jason.encode!(decoded_value))
-          {:error, message} -> IO.puts("Error: #{message}")
-          _ -> IO.puts("Error: Unexpected decoding result")
-        end
-
-      [command | _] ->
-        IO.puts("Unknown command: #{command}")
-        System.halt(1)
+      [command | args] ->
+        execute_command(command, args)
 
       [] ->
         IO.puts("Usage: your_bittorrent.sh <command> <args>")
         System.halt(1)
+    end
+  end
+
+  defp execute_command("info", [torrent_file]) do
+    case TorrentParser.parse_file(torrent_file) do
+      {:ok, %{tracker_url: tracker_url, length: length}} ->
+        IO.puts("Tracker URL: #{tracker_url}")
+        IO.puts("Length: #{length}")
+
+      {:error, message} ->
+        IO.puts("Error: #{message}")
+    end
+  end
+
+  defp execute_command("decode", [encoded_str]) do
+    case Bencode.decode(encoded_str) do
+      {:ok, decoded_value, _rest} -> IO.puts(Jason.encode!(decoded_value))
+      {:error, message} -> IO.puts("Error: #{message}")
+      _ -> IO.puts("Error: Unexpected decoding result")
+    end
+  end
+
+  defp execute_command(command, _args) do
+    IO.puts("Unknown command: #{command}")
+  end
+end
+
+defmodule TorrentParser do
+  def parse_file(path) do
+    with {:ok, binary} <- File.read(path),
+         {:ok, decoded, _rest} <- Bencode.decode(binary),
+         {:ok, tracker_url} <- Map.fetch(decoded, "announce"),
+         {:ok, info} <- Map.fetch(decoded, "info"),
+         {:ok, length} <- Map.fetch(info, "length") do
+      {:ok, %{tracker_url: tracker_url, length: length}}
+    else
+      {:error, reason} -> {:error, "Failed to parse torrent file: #{inspect(reason)}"}
+      :error -> {:error, "Missing required fields in torrent file"}
     end
   end
 end

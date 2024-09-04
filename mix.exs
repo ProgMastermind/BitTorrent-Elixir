@@ -9,13 +9,14 @@ defmodule App.MixProject do
       escript: [main_module: Bittorrent.CLI],
       elixir: "~> 1.10",
       start_permanent: Mix.env() == :prod,
-      deps: deps(),
+      deps: deps()
     ]
   end
-  
+
   defp deps do
     [
       {:jason, "~> 1.2"},
+      {:bento, "~> 1.0"}
     ]
   end
 end

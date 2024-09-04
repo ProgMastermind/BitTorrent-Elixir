@@ -1,3 +1,4 @@
 %{
+  "bento": {:hex, :bento, "1.0.0", "5097e6f02e4980b72d08bf0270026f6f5c9bf5d8ca606b43d41321b549d49de8", [:mix], [], "hexpm", "b921b335a555f7570adfac0cc41864c76377f6852617cf1f25fbb88578b993c8"},
   "jason": {:hex, :jason, "1.4.1", "af1504e35f629ddcdd6addb3513c3853991f694921b1b9368b0bd32beb9f1b63", [:mix], [{:decimal, "~> 1.0 or ~> 2.0", [hex: :decimal, repo: "hexpm", optional: true]}], "hexpm", "fbb01ecdfd565b56261302f7e1fcc27c4fb8f32d56eab74db621fc154604a7a1"},
 }
