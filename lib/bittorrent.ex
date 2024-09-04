@@ -1,54 +1,73 @@
 defmodule Bittorrent.CLI do
   def main(argv) do
-      case argv do
-          ["decode" | [encoded_str | _]] ->
-              decoded_str = Bencode.decode(encoded_str)
-              IO.puts(Jason.encode!(decoded_str))
-          [command | _] ->
-              IO.puts("Unknown command: #{command}")
-              System.halt(1)
-          [] ->
-              IO.puts("Usage: your_bittorrent.sh <command> <args>")
-              System.halt(1)
-      end
+    case argv do
+      ["decode" | [encoded_str | _]] ->
+        case Bencode.decode(encoded_str) do
+          {:ok, decoded_value, _rest} -> IO.puts(Jason.encode!(decoded_value))
+          {:error, message} -> IO.puts("Error: #{message}")
+          _ -> IO.puts("Error: Unexpected decoding result")
+        end
+
+      [command | _] ->
+        IO.puts("Unknown command: #{command}")
+        System.halt(1)
+
+      [] ->
+        IO.puts("Usage: your_bittorrent.sh <command> <args>")
+        System.halt(1)
+    end
   end
 end
 
 defmodule Bencode do
-  def decode(encoded_value) when is_binary(encoded_value) do
-    binary_data = :binary.bin_to_list(encoded_value)
+  def decode(<<"l", rest::binary>>) do
+    decode_list(rest, [])
+  end
 
-    case find_colon_index(binary_data) do
-      nil ->
-        case find_integer_start(binary_data) do
-          nil ->
-            IO.puts("Neither ':' nor 'i' character found in the binary")
-            nil
-          integer_start_index ->
-            decode_integer(binary_data, integer_start_index)
-        end
-      colon_index ->
-        decode_string(binary_data, colon_index)
+  def decode(<<"i", rest::binary>>) do
+    decode_integer(rest)
+  end
+
+  def decode(<<digit, _::binary>> = data) when digit in ?0..?9 do
+    decode_string(data)
+  end
+
+  def decode(_), do: {:error, "Invalid bencoded value"}
+
+  defp decode_list(<<"e", rest::binary>>, acc) do
+    {:ok, Enum.reverse(acc), rest}
+  end
+
+  defp decode_list(data, acc) do
+    case decode(data) do
+      {:ok, value, rest} ->
+        decode_list(rest, [value | acc])
+
+      {:error, _} = error ->
+        error
     end
   end
 
-  def decode(_), do: "Invalid encoded value: not binary"
-
-  defp find_colon_index(binary_data) do
-    Enum.find_index(binary_data, fn char -> char == 58 end)
+  defp decode_integer(data) do
+    case Integer.parse(data) do
+      {integer, <<"e", rest::binary>>} -> {:ok, integer, rest}
+      _ -> {:error, "Invalid integer encoding"}
+    end
   end
 
-  defp find_integer_start(binary_data) do
-    Enum.find_index(binary_data, fn char -> char == 105 end)
-  end
+  defp decode_string(data) do
+    case Integer.parse(data) do
+      {length, <<":", rest::binary>>} ->
+        if byte_size(rest) >= length do
+          string_value = binary_part(rest, 0, length)
+          remaining = binary_part(rest, length, byte_size(rest) - length)
+          {:ok, string_value, remaining}
+        else
+          {:error, "String length mismatch"}
+        end
 
-  defp decode_string(binary_data, index) do
-    rest = Enum.slice(binary_data, index + 1..-1)
-    List.to_string(rest)
-  end
-
-  defp decode_integer(binary_data, index) do
-    rest = Enum.slice(binary_data, index+1..-2)
-    List.to_integer(rest)
+      _ ->
+        {:error, "Invalid string encoding"}
+    end
   end
 end
