@@ -10,6 +10,17 @@ defmodule Bittorrent.CLI do
     end
   end
 
+  defp execute_command("download", ["-o", output_file, torrent_file]) do
+    case PieceDownloader.download_file(torrent_file, output_file) do
+      {:ok, message} ->
+        IO.puts(message)
+
+      {:error, reason} ->
+        IO.puts("Error: #{inspect(reason)}")
+        System.halt(1)
+    end
+  end
+
   defp execute_command("download_piece", ["-o", output_file, torrent_file, piece_index]) do
     piece_index = String.to_integer(piece_index)
 
@@ -268,6 +279,52 @@ defmodule PieceDownloader do
     actual_hash = :crypto.hash(:sha, piece_data) |> Base.encode16(case: :lower)
     expected_hash = Enum.at(piece_hashes, piece_index)
     if actual_hash == expected_hash, do: :ok, else: {:error, "Piece hash mismatch"}
+  end
+
+  def download_file(torrent_file, output_file) do
+    with {:ok, torrent_info} <- TorrentParser.parse_file(torrent_file),
+         {:ok, {ip, port}} <- get_peer(torrent_file),
+         {:ok, socket} <- YourBittorrentClient.perform_handshake(torrent_file, ip, port),
+         :ok <- wait_for_bitfield(socket),
+         :ok <- send_interested(socket),
+         :ok <- wait_for_unchoke(socket) do
+      piece_count = length(torrent_info.piece_hashes)
+
+      result =
+        Enum.reduce_while(0..(piece_count - 1), {:ok, []}, fn piece_index, {:ok, acc} ->
+          case download_and_verify_piece(socket, torrent_info, piece_index) do
+            {:ok, piece_data} -> {:cont, {:ok, [piece_data | acc]}}
+            {:error, reason} -> {:halt, {:error, reason}}
+          end
+        end)
+
+      :gen_tcp.close(socket)
+
+      case result do
+        {:ok, pieces} ->
+          combined_data = Enum.reverse(pieces) |> IO.iodata_to_binary()
+          write_file(combined_data, output_file)
+
+        {:error, reason} ->
+          {:error, reason}
+      end
+    else
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp download_and_verify_piece(socket, torrent_info, piece_index) do
+    with {:ok, piece_data} <- download_piece_data(socket, torrent_info, piece_index),
+         :ok <- verify_piece(piece_data, torrent_info.piece_hashes, piece_index) do
+      {:ok, piece_data}
+    end
+  end
+
+  defp write_file(data, output_file) do
+    case File.write(output_file, data) do
+      :ok -> {:ok, "Downloaded #{Path.basename(output_file)} to #{output_file}."}
+      {:error, reason} -> {:error, "Failed to write file: #{inspect(reason)}"}
+    end
   end
 end
 
