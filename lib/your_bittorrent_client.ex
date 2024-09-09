@@ -39,7 +39,6 @@ defmodule Bittorrent.YourBittorrentClient do
              {:ok, response} <- :gen_tcp.recv(socket, 68, 10000) do
           peer_id = binary_part(response, 48, 20)
           Logger.info("Handshake successful. Peer ID: #{Base.encode16(peer_id, case: :lower)}")
-          # Ensure this is returned
           {:ok, socket}
         else
           {:error, reason} ->
