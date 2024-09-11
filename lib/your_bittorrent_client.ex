@@ -6,7 +6,7 @@ defmodule Bittorrent.YourBittorrentClient do
 
   require Logger
 
-  def start_download(torrent_file) do
+  def get_peers(torrent_file) do
     peer_id = generate_peer_id()
     # Or any port you want to use
     port = 6881
